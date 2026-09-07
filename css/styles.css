@@ -403,6 +403,11 @@ main,
   padding: 2px;
 }
 
+.extra-days,
+.overlay .day-bar {
+  display: grid;
+}
+
 .day-chip {
   min-width: 0;
   min-height: 40px;
@@ -466,6 +471,11 @@ main,
 .badge.sky {
   background: var(--sky-soft);
   color: var(--sky-deep);
+}
+
+.badge.extra {
+  background: #ede7f6;
+  color: #6d4eaf;
 }
 
 .period-list {
@@ -559,6 +569,47 @@ main,
   border-radius: 14px;
 }
 
+.empty-session.is-add {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.empty-session.is-mini {
+  margin-top: 6px;
+  min-height: 36px;
+  padding: 6px 10px;
+}
+
+.empty-plus {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--pink-soft);
+  color: var(--pink-deep);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.pick small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
 .add-row {
   display: flex;
   flex-wrap: wrap;
@@ -581,11 +632,15 @@ main,
 }
 
 .week-board {
-  overflow-x: auto;
+  overflow: hidden;
   background: #fff;
   border-radius: 24px;
   box-shadow: var(--shadow);
   border: 1px solid #ffd7e4;
+}
+
+.week-table-wrap {
+  overflow-x: auto;
 }
 
 .tkb {
@@ -732,6 +787,15 @@ main,
   background: #3aa0e6;
 }
 
+.bell-grid .extra-session {
+  grid-column: 1 / -1;
+}
+
+.bell-grid .extra-no,
+.extra-session .period-no {
+  background: #8b6cc9;
+}
+
 .bell-row.is-break .period-no {
   background: #e0b84a;
   font-size: 11px;
@@ -863,6 +927,10 @@ body {
 
 .anim-in > .session:nth-child(2) {
   animation-delay: 0.12s;
+}
+
+.anim-in > .session:nth-child(3) {
+  animation-delay: 0.2s;
 }
 
 .now.is-live .pill {
@@ -1062,16 +1130,10 @@ body {
 
 .time-fields {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 12px minmax(0, 1fr);
-  gap: 4px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
   align-items: center;
   min-width: 0;
-}
-
-.time-sep {
-  text-align: center;
-  color: var(--muted);
-  font-weight: 800;
 }
 
 .settings-sheet,
@@ -1079,8 +1141,43 @@ body {
   box-sizing: border-box;
 }
 
+.week-extras {
+  padding: 12px 12px 14px;
+  border-top: 1px solid #ffe4ee;
+}
+
+.extra-week-list,
+.extra-settings-list {
+  display: grid;
+  gap: 8px;
+}
+
+.extra-week-card,
+.extra-setting-card {
+  appearance: none;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  padding: 10px 12px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+}
+
+.extra-week-card span,
+.extra-setting-card span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .settings-sheet input[type="text"],
-.settings-sheet input[type="time"] {
+.extra-sheet input[type="text"],
+.settings-sheet input[type="time"],
+.extra-sheet input[type="time"] {
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -1093,11 +1190,13 @@ body {
   background: #fff;
 }
 
-.settings-sheet input[type="time"] {
+.settings-sheet input[type="time"],
+.extra-sheet input[type="time"] {
   padding-inline: 6px;
 }
 
-.settings-sheet input[type="time"]::-webkit-calendar-picker-indicator {
+.settings-sheet input[type="time"]::-webkit-calendar-picker-indicator,
+.extra-sheet input[type="time"]::-webkit-calendar-picker-indicator {
   width: 14px;
   height: 14px;
   margin: 0 0 0 2px;

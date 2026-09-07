@@ -8,6 +8,7 @@ const defaultNotify = {
   start: true,
   startPm: true,
   pickup: true,
+  extra: true,
 };
 
 function notifyClassName() {
@@ -145,6 +146,25 @@ function reminderList(dayIndex, lead) {
       });
     }
   }
+  if (notifySettings.extra && typeof extrasForDay === "function") {
+    extrasForDay(dayIndex).forEach((item) => {
+      if (!item.remind) return;
+      items.push({
+        id: `ex-lead-${item.id}`,
+        at: parseHm(item.start) - lead,
+        title: `Sắp học thêm · ${item.name}`,
+        body: `Còn ${lead} phút nữa học thêm (${item.start}${item.place ? ` · ${item.place}` : ""}). Lớp ${cls}.`,
+        tab: "tkb",
+      });
+      items.push({
+        id: `ex-start-${item.id}`,
+        at: parseHm(item.start),
+        title: `Bắt đầu học thêm · ${item.name}`,
+        body: `Đến giờ học thêm lúc ${item.start}${item.place ? ` · ${item.place}` : ""}.`,
+        tab: "tkb",
+      });
+    });
+  }
   return items.filter((item) => item.at >= 0);
 }
 
@@ -269,6 +289,7 @@ function renderNotifyPanel() {
   document.getElementById("notifyStart").checked = notifySettings.start;
   document.getElementById("notifyStartPm").checked = notifySettings.startPm;
   document.getElementById("notifyPickup").checked = notifySettings.pickup;
+  document.getElementById("notifyExtra").checked = notifySettings.extra;
 
   const iosHint = document.getElementById("notifyIos");
   const onIosBrowser = isIosDevice() && !isStandaloneApp();
@@ -327,12 +348,16 @@ function bindNotify() {
     { id: "notifyStart", key: "start" },
     { id: "notifyStartPm", key: "startPm" },
     { id: "notifyPickup", key: "pickup" },
+    { id: "notifyExtra", key: "extra" },
   ].forEach(({ id, key }) => {
     document.getElementById(id).addEventListener("change", (event) => {
       notifySettings[key] = event.target.checked;
       saveNotify();
       scheduleLocalReminders();
     });
+  });
+  document.getElementById("notifyCalendar").addEventListener("click", () => {
+    if (typeof downloadCalendarIcs === "function") downloadCalendarIcs();
   });
   document.getElementById("notifyCopy").addEventListener("click", async () => {
     const raw = localStorage.getItem("tkb-1a9-push-sub");

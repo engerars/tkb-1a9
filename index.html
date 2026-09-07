@@ -133,12 +133,18 @@
         <label class="check-row"><input id="notifyStart" type="checkbox" checked /> Vào học sáng</label>
         <label class="check-row"><input id="notifyStartPm" type="checkbox" checked /> Vào học chiều</label>
         <label class="check-row"><input id="notifyPickup" type="checkbox" checked /> Đón tan học</label>
+        <label class="check-row"><input id="notifyExtra" type="checkbox" checked /> Học thêm</label>
+        <p class="ios-hint" id="notifyCalendarHint">
+          iPhone: thông báo web thường <b>không có chuông</b>. Bấm <b>Thêm vào Lịch</b>
+          để app Lịch kêu chuông đúng giờ, kể cả khi đã tắt TKB 1A9.
+        </p>
         <p class="custom-label">Nhắc sắp tới hôm nay</p>
         <ul class="notify-next" id="notifyNext"></ul>
         <div class="editor-actions">
           <button type="button" id="notifyTest">Gửi thử</button>
           <button type="button" class="ghost" id="closeNotify">Đóng</button>
         </div>
+        <button type="button" class="reset-btn" id="notifyCalendar">Thêm học thêm vào Lịch iPhone (có chuông)</button>
         <button type="button" class="reset-btn" id="notifyCopy">Sao chép mã thiết bị (nhắc khi tắt app)</button>
       </div>
     </div>
@@ -153,6 +159,47 @@
           <button type="button" class="ghost" id="closeSettings">Đóng</button>
         </div>
         <button type="button" class="reset-btn" id="resetTimes">Khôi phục giờ mặc định</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="extraSheet" hidden>
+      <div class="sheet extra-sheet" role="dialog" aria-modal="true" aria-labelledby="extraTitle">
+        <h2 id="extraTitle">Thêm tiết học thêm</h2>
+        <p class="editor-sub">Giờ tự chọn, không theo tiết trên trường.</p>
+        <label class="custom-label" for="extraName">Tên môn / lớp thêm</label>
+        <input id="extraName" type="text" maxlength="40" placeholder="Ví dụ: Toán tư duy" />
+        <p class="custom-label">Ngày học</p>
+        <div class="day-bar extra-days" id="extraDays"></div>
+        <p class="custom-label">Giờ học</p>
+        <p class="time-hint">Bắt đầu và kết thúc</p>
+        <div class="time-row">
+          <span class="time-label">Giờ</span>
+          <div class="time-fields">
+            <input type="time" id="extraStart" value="17:00" />
+            <input type="time" id="extraEnd" value="18:00" />
+          </div>
+        </div>
+        <label class="custom-label" for="extraPlace">Địa điểm (không bắt buộc)</label>
+        <input id="extraPlace" type="text" maxlength="40" placeholder="Nhà cô, trung tâm..." />
+        <label class="check-row"><input id="extraRemind" type="checkbox" checked /> Nhắc trước giờ học thêm</label>
+        <div class="editor-actions confirm-row">
+          <button type="button" id="saveExtra">Lưu</button>
+        </div>
+        <div class="editor-actions">
+          <button type="button" class="ghost" id="deleteExtra" hidden>Xóa</button>
+          <button type="button" class="ghost" id="closeExtra">Đóng</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay" id="periodPick" hidden>
+      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="periodPickTitle">
+        <h2 id="periodPickTitle">Chọn tiết</h2>
+        <p class="editor-sub" id="periodPickSub"></p>
+        <div class="subject-grid" id="periodPickGrid"></div>
+        <div class="editor-actions confirm-row">
+          <button type="button" class="ghost" id="closePeriodPick">Đóng</button>
+        </div>
       </div>
     </div>
 

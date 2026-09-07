@@ -221,13 +221,64 @@ function bellsRows(session) {
 const TIMETABLE = cloneTimetable(DEFAULT_TIMETABLE);
 let customSubjects = [];
 
+const EXTRAS_KEY = "tkb-1a9-extras-v1";
+const ICS_DAYS = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
+let extras = loadExtras();
+
 const state = {
   tab: "tkb",
   dayIndex: todayIndex(),
   edit: null,
+  extraId: null,
+  returnToSettings: false,
   pendingSubject: null,
   swiped: false,
 };
+
+function newExtraId() {
+  return `ex-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function normalizeExtra(item) {
+  if (!item || typeof item !== "object") return null;
+  const name = String(item.name || "").trim().slice(0, 40);
+  if (!name) return null;
+  const days = Array.isArray(item.days) && item.days.length === 7 ? item.days.map(Boolean) : DAYS.map(() => false);
+  return {
+    id: String(item.id || newExtraId()),
+    name,
+    start: /^\d{2}:\d{2}/.test(item.start || "") ? item.start.slice(0, 5) : "17:00",
+    end: /^\d{2}:\d{2}/.test(item.end || "") ? item.end.slice(0, 5) : "18:00",
+    days,
+    place: String(item.place || "").trim().slice(0, 40),
+    remind: item.remind !== false,
+  };
+}
+
+function loadExtras() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(EXTRAS_KEY) || "[]");
+    return Array.isArray(raw) ? raw.map(normalizeExtra).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveExtras() {
+  localStorage.setItem(EXTRAS_KEY, JSON.stringify(extras));
+}
+
+function extrasForDay(dayIndex) {
+  return extras
+    .filter((item) => item.days[dayIndex])
+    .sort((a, b) => parseHm(a.start) - parseHm(b.start));
+}
+
+function extraDayLabel(item) {
+  return DAYS.filter((_, index) => item.days[index])
+    .map((day) => day.short)
+    .join(", ");
+}
 
 function cloneTimetable(source) {
   return {
@@ -377,17 +428,38 @@ function currentSlot(date) {
   if (hasAfternoon && now >= parseHm(startA) && now < parseHm(endA)) {
     return { kind: "gap", session: "afternoon", label: "Chuyển tiết" };
   }
+  const extraNow = extrasForDay(dayIndex).find((item) => now >= parseHm(item.start) && now < parseHm(item.end));
+  if (extraNow) {
+    return {
+      kind: "period",
+      session: "extra",
+      period: extraNow.id,
+      label: `Học thêm · ${extraNow.name}`,
+    };
+  }
+  const extraSoon = extrasForDay(dayIndex).find((item) => now >= parseHm(item.start) - 15 && now < parseHm(item.start));
+  if (extraSoon) {
+    return { kind: "arrive", session: "extra", period: extraSoon.id, label: `Sắp học thêm · ${extraSoon.name} (${extraSoon.start})` };
+  }
+  const extraNext = extrasForDay(dayIndex).find((item) => parseHm(item.start) > now);
+
   if (hasAfternoon && now >= parseHm(endA)) {
-    return { kind: "done", label: "Đã tan học" };
+    return extraNext
+      ? { kind: "wait", label: `Tan học · học thêm lúc ${extraNext.start}` }
+      : { kind: "done", label: "Đã tan học" };
   }
   if (!hasMorning && !hasAfternoon) {
-    return { kind: "off", label: `${dayName} không có tiết học` };
+    return extraNext
+      ? { kind: "wait", label: `${dayName} · học thêm lúc ${extraNext.start}` }
+      : { kind: "off", label: `${dayName} không có tiết học` };
   }
   if (!hasMorning && now < parseHm(arriveA)) {
     return { kind: "off", label: `Sáng ${dayName} không có tiết học` };
   }
   if (!hasAfternoon && now >= parseHm(endM)) {
-    return { kind: "off", label: `Chiều ${dayName} không có tiết học` };
+    return extraNext
+      ? { kind: "wait", label: `Tan học sáng · học thêm lúc ${extraNext.start}` }
+      : { kind: "off", label: `Chiều ${dayName} không có tiết học` };
   }
   return { kind: "wait", label: "Chưa đến giờ vào lớp" };
 }
@@ -457,18 +529,16 @@ function renderPeriodCards(session, dayIndex) {
           </button>`;
         })
         .join("")}</div>`
-    : `<p class="empty-session">Không có tiết</p>`;
-
-  const add = empty.length
-    ? `<div class="add-row">${empty
-        .map(
-          ({ row, rowIndex }) =>
-            `<button type="button" class="add-chip" data-edit data-session="${session}" data-row="${rowIndex}" data-day="${dayIndex}">+ Tiết ${row.period}</button>`
-        )
-        .join("")}</div>`
     : "";
 
-  return `${list}${add}`;
+  const addBtn = (compact) =>
+    `<button type="button" class="empty-session is-add${compact ? " is-mini" : ""}" data-add-session="${session}" data-day="${dayIndex}">
+      <span>${compact ? "Thêm tiết" : "Không có tiết"}</span>
+      <span class="empty-plus">+</span>
+    </button>`;
+
+  if (!filled.length) return addBtn(false);
+  return `${list}${empty.length ? addBtn(true) : ""}`;
 }
 
 function renderDayBoard(animate = true) {
@@ -488,8 +558,41 @@ function renderDayBoard(animate = true) {
       </div>
       ${renderPeriodCards("afternoon", state.dayIndex)}
     </section>
+    ${renderExtraSession(state.dayIndex)}
   `;
   if (animate) replayAnim(board);
+}
+
+function renderExtraSession(dayIndex) {
+  const date = vietnamNow();
+  const list = extrasForDay(dayIndex);
+  const cards = list.length
+    ? `<div class="period-list">${list
+        .map((item, index) => {
+          const now = isCurrentPeriod("extra", item.id, dayIndex, date);
+          const style = subjectStyle(item.name);
+          return `<button type="button" class="period-card${now ? " is-now" : ""}" style="--i:${index}" data-extra="${item.id}">
+            <div class="period-no" style="background:${style.color}">＋</div>
+            <p class="period-name">${escapeHtml(item.name)}</p>
+            <p class="period-time">${item.start}–${item.end}${item.place ? ` · ${escapeHtml(item.place)}` : ""}</p>
+          </button>`;
+        })
+        .join("")}</div>
+    <button type="button" class="empty-session is-add is-mini" data-extra="">
+      <span>Thêm tiết</span>
+      <span class="empty-plus">+</span>
+    </button>`
+    : `<button type="button" class="empty-session is-add" data-extra="">
+      <span>Chưa có tiết học thêm</span>
+      <span class="empty-plus">+</span>
+    </button>`;
+  return `<section class="session extra-session">
+    <div class="session-head">
+      <h2>Học thêm</h2>
+      <span class="badge extra">Giờ linh hoạt</span>
+    </div>
+    ${cards}
+  </section>`;
 }
 
 function subjectButton(name, session, rowIndex, dayIndex, isNow) {
@@ -558,6 +661,7 @@ function renderWeekBoard() {
     .join("");
 
   document.getElementById("weekBoard").innerHTML = `
+    <div class="week-table-wrap">
     <table class="tkb">
       <thead>
         <tr>
@@ -569,7 +673,39 @@ function renderWeekBoard() {
       </thead>
       <tbody>${morningRows}${afternoonRows}</tbody>
     </table>
+    </div>
+    ${renderWeekExtras()}
   `;
+}
+
+function renderWeekExtras() {
+  if (!extras.length) {
+    return `<div class="week-extras">
+      <div class="session-head"><h2>Học thêm</h2><span class="badge extra">Giờ linh hoạt</span></div>
+      <button type="button" class="empty-session is-add" data-extra="">
+        <span>Chưa có tiết học thêm</span>
+        <span class="empty-plus">+</span>
+      </button>
+    </div>`;
+  }
+  const cards = extras
+    .map((item) => {
+      const style = subjectStyle(item.name);
+      return `<button type="button" class="extra-week-card" data-extra="${item.id}" style="border-color:${style.color}">
+        <b style="color:${style.color}">${escapeHtml(item.name)}</b>
+        <span>${item.start}–${item.end}${item.place ? ` · ${escapeHtml(item.place)}` : ""}</span>
+        <span>${extraDayLabel(item) || "Chưa chọn ngày"}</span>
+      </button>`;
+    })
+    .join("");
+  return `<div class="week-extras">
+    <div class="session-head"><h2>Học thêm</h2><span class="badge extra">Giờ linh hoạt</span></div>
+    <div class="extra-week-list">${cards}</div>
+    <button type="button" class="empty-session is-add is-mini" data-extra="">
+      <span>Thêm tiết</span>
+      <span class="empty-plus">+</span>
+    </button>
+  </div>`;
 }
 
 function isBellNow(session, period) {
@@ -605,7 +741,31 @@ function renderBells() {
       </div>
       <div class="period-list">${rows}</div>
     </section>`;
-  }).join("");
+  }).join("") + renderBellExtras();
+}
+
+function renderBellExtras() {
+  const today = todayIndex();
+  const list = extrasForDay(today);
+  const rows = list.length
+    ? list
+        .map((item, index) => {
+          const now = isCurrentPeriod("extra", item.id, today, vietnamNow());
+          return `<div class="bell-row${now ? " is-now" : ""}" style="--i:${index}">
+            <div class="period-no extra-no">＋</div>
+            <p class="period-name">${escapeHtml(item.name)}${item.place ? ` · ${escapeHtml(item.place)}` : ""}</p>
+            <p class="period-time">${item.start}–${item.end}</p>
+          </div>`;
+        })
+        .join("")
+    : `<div class="bell-row"><p class="period-name">Chưa có tiết học thêm hôm nay</p></div>`;
+  return `<section class="session extra-session">
+    <div class="session-head">
+      <h2>Học thêm hôm nay</h2>
+      <span class="badge extra">Giờ linh hoạt</span>
+    </div>
+    <div class="period-list">${rows}</div>
+  </section>`;
 }
 
 function replayAnim(element) {
@@ -686,6 +846,34 @@ function closeEditor() {
   document.getElementById("editor").hidden = true;
 }
 
+function emptyPeriods(session, dayIndex) {
+  return TIMETABLE[session]
+    .map((row, rowIndex) => ({ row, rowIndex }))
+    .filter(({ row }) => !row.days[dayIndex]);
+}
+
+function openPeriodPick(session, dayIndex) {
+  const slots = emptyPeriods(session, dayIndex);
+  if (!slots.length) return;
+  if (slots.length === 1) {
+    openEditor(session, slots[0].rowIndex, dayIndex);
+    return;
+  }
+  const sessionLabel = session === "morning" ? "Sáng" : "Chiều";
+  document.getElementById("periodPickSub").textContent = `${DAYS[dayIndex].name} · ${sessionLabel}`;
+  document.getElementById("periodPickGrid").innerHTML = slots
+    .map(
+      ({ row, rowIndex }) =>
+        `<button type="button" class="pick" data-edit data-session="${session}" data-row="${rowIndex}" data-day="${dayIndex}">Tiết ${row.period}<small>${row.start} – ${row.end}</small></button>`
+    )
+    .join("");
+  document.getElementById("periodPick").hidden = false;
+}
+
+function closePeriodPick() {
+  document.getElementById("periodPick").hidden = true;
+}
+
 function applySubject(name) {
   if (!state.edit) return;
   const { session, rowIndex, dayIndex } = state.edit;
@@ -734,6 +922,16 @@ function bind() {
       state.swiped = false;
       return;
     }
+    const extra = event.target.closest("[data-extra]");
+    if (extra) {
+      openExtraEditor(extra.dataset.extra || null);
+      return;
+    }
+    const addSession = event.target.closest("[data-add-session]");
+    if (addSession) {
+      openPeriodPick(addSession.dataset.addSession, Number(addSession.dataset.day));
+      return;
+    }
     const target = event.target.closest("[data-edit]");
     if (!target) return;
     openEditor(target.dataset.session, Number(target.dataset.row), Number(target.dataset.day));
@@ -751,7 +949,8 @@ function bind() {
     touchX = null;
     if (Math.abs(dx) < 50) return;
     state.swiped = true;
-    state.dayIndex = Math.max(0, Math.min(DAYS.length - 1, state.dayIndex + (dx < 0 ? 1 : -1)));
+    const step = dx < 0 ? 1 : -1;
+    state.dayIndex = (state.dayIndex + step + DAYS.length) % DAYS.length;
     renderDayBar();
     renderDayBoard();
   }, { passive: true });
@@ -783,6 +982,16 @@ function bind() {
   document.getElementById("editor").addEventListener("click", (event) => {
     if (event.target.id === "editor") closeEditor();
   });
+  document.getElementById("periodPickGrid").addEventListener("click", (event) => {
+    const target = event.target.closest("[data-edit]");
+    if (!target) return;
+    closePeriodPick();
+    openEditor(target.dataset.session, Number(target.dataset.row), Number(target.dataset.day));
+  });
+  document.getElementById("closePeriodPick").addEventListener("click", closePeriodPick);
+  document.getElementById("periodPick").addEventListener("click", (event) => {
+    if (event.target.id === "periodPick") closePeriodPick();
+  });
   document.getElementById("settingsOpen").addEventListener("click", openSettings);
   document.getElementById("closeSettings").addEventListener("click", closeSettings);
   document.getElementById("settingsSheet").addEventListener("click", (event) => {
@@ -801,6 +1010,11 @@ function bind() {
     if (typeof scheduleLocalReminders === "function") scheduleLocalReminders();
   });
   document.getElementById("settingsForm").addEventListener("click", (event) => {
+    const extra = event.target.closest("[data-extra]");
+    if (extra) {
+      openExtraEditor(extra.dataset.extra || null, true);
+      return;
+    }
     const swatch = event.target.closest("[data-theme]");
     if (!swatch) return;
     applyTheme(swatch.dataset.theme);
@@ -808,6 +1022,17 @@ function bind() {
     document.querySelectorAll(".theme-swatch").forEach((button) => {
       button.classList.toggle("is-selected", button.dataset.theme === settings.theme);
     });
+  });
+  document.getElementById("saveExtra").addEventListener("click", commitExtra);
+  document.getElementById("deleteExtra").addEventListener("click", removeExtra);
+  document.getElementById("closeExtra").addEventListener("click", closeExtraEditor);
+  document.getElementById("extraSheet").addEventListener("click", (event) => {
+    if (event.target.id === "extraSheet") closeExtraEditor();
+  });
+  document.getElementById("extraDays").addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-extra-day]");
+    if (!chip) return;
+    chip.classList.toggle("is-active");
   });
   document.getElementById("resetBtn").addEventListener("click", () => {
     if (confirm("Khôi phục thời khóa biểu ban đầu? Các thay đổi sẽ bị xóa.")) {
@@ -817,7 +1042,9 @@ function bind() {
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     closeEditor();
+    closePeriodPick();
     closeSettings();
+    closeExtraEditor();
   });
 }
 
@@ -826,7 +1053,6 @@ function timeRow(label, startId, endId, start, end) {
     <span class="time-label">${label}</span>
     <div class="time-fields">
       <input type="time" id="${startId}" value="${start}" />
-      <span class="time-sep">–</span>
       <input type="time" id="${endId}" value="${end}" />
     </div>
   </div>`;
@@ -844,6 +1070,9 @@ function renderSettingsForm() {
   form.innerHTML = `
     <label class="custom-label" for="classNameInput">Tên lớp</label>
     <input id="classNameInput" type="text" maxlength="20" value="${escapeHtml(settings.className)}" placeholder="1A9" />
+    <p class="custom-label">Học thêm (ngoài trường)</p>
+    <p class="time-hint">Giờ tự chọn, không theo tiết trên trường</p>
+    <div class="extra-settings-list">${renderExtrasSettings()}</div>
     <p class="custom-label">Giao diện màu</p>
     <div class="theme-grid">
       ${THEMES.map(
@@ -896,6 +1125,195 @@ function commitSettings() {
   renderAll();
   closeSettings();
   if (typeof scheduleLocalReminders === "function") scheduleLocalReminders();
+}
+
+function renderExtrasSettings() {
+  if (!extras.length) {
+    return `<button type="button" class="empty-session is-add" data-extra="">
+      <span>Chưa có tiết học thêm</span>
+      <span class="empty-plus">+</span>
+    </button>`;
+  }
+  const cards = extras
+    .map((item) => {
+      const style = subjectStyle(item.name);
+      return `<button type="button" class="extra-setting-card" data-extra="${item.id}">
+        <b style="color:${style.color}">${escapeHtml(item.name)}</b>
+        <span>${item.start}–${item.end} · ${extraDayLabel(item) || "Chưa chọn ngày"}</span>
+      </button>`;
+    })
+    .join("");
+  return `${cards}
+    <button type="button" class="empty-session is-add is-mini" data-extra="">
+      <span>Thêm tiết</span>
+      <span class="empty-plus">+</span>
+    </button>`;
+}
+
+function extraDraftFromForm() {
+  const days = [...document.querySelectorAll("#extraDays [data-extra-day]")].map((chip) => chip.classList.contains("is-active"));
+  return normalizeExtra({
+    id: state.extraId || newExtraId(),
+    name: document.getElementById("extraName").value,
+    start: readTime("extraStart", "17:00"),
+    end: readTime("extraEnd", "18:00"),
+    days,
+    place: document.getElementById("extraPlace").value,
+    remind: document.getElementById("extraRemind").checked,
+  });
+}
+
+function openExtraEditor(id, fromSettings = false) {
+  if (fromSettings) {
+    state.returnToSettings = true;
+    closeSettings();
+  }
+  const item = id ? extras.find((extra) => extra.id === id) : null;
+  state.extraId = item ? item.id : null;
+  document.getElementById("extraTitle").textContent = item ? "Sửa tiết học thêm" : "Thêm tiết học thêm";
+  document.getElementById("extraName").value = item?.name || "";
+  document.getElementById("extraStart").value = item?.start || "17:00";
+  document.getElementById("extraEnd").value = item?.end || "18:00";
+  document.getElementById("extraPlace").value = item?.place || "";
+  document.getElementById("extraRemind").checked = item ? item.remind : true;
+  document.getElementById("deleteExtra").hidden = !item;
+  const selected = item?.days || DAYS.map((_, index) => index === state.dayIndex);
+  document.getElementById("extraDays").innerHTML = DAYS.map(
+    (day, index) =>
+      `<button type="button" class="day-chip${selected[index] ? " is-active" : ""}" data-extra-day="${index}">${day.short}</button>`
+  ).join("");
+  document.getElementById("extraSheet").hidden = false;
+}
+
+function closeExtraEditor() {
+  document.getElementById("extraSheet").hidden = true;
+  state.extraId = null;
+  if (state.returnToSettings) {
+    state.returnToSettings = false;
+    openSettings();
+  }
+}
+
+function commitExtra() {
+  const draft = extraDraftFromForm();
+  if (!draft) {
+    alert("Nhập tên tiết học thêm.");
+    return;
+  }
+  if (!draft.days.some(Boolean)) {
+    alert("Chọn ít nhất một ngày học thêm.");
+    return;
+  }
+  if (parseHm(draft.end) <= parseHm(draft.start)) {
+    alert("Giờ kết thúc phải sau giờ bắt đầu.");
+    return;
+  }
+  const index = extras.findIndex((item) => item.id === draft.id);
+  if (index >= 0) extras[index] = draft;
+  else extras.push(draft);
+  extras.sort((a, b) => parseHm(a.start) - parseHm(b.start) || a.name.localeCompare(b.name, "vi"));
+  saveExtras();
+  state.extraId = null;
+  document.getElementById("extraSheet").hidden = true;
+  if (state.returnToSettings) {
+    state.returnToSettings = false;
+    openSettings();
+  }
+  renderAll();
+  if (typeof scheduleLocalReminders === "function") scheduleLocalReminders();
+}
+
+function removeExtra() {
+  if (!state.extraId || !confirm("Xóa tiết học thêm này?")) return;
+  extras = extras.filter((item) => item.id !== state.extraId);
+  saveExtras();
+  state.extraId = null;
+  document.getElementById("extraSheet").hidden = true;
+  if (state.returnToSettings) {
+    state.returnToSettings = false;
+    openSettings();
+  }
+  renderAll();
+  if (typeof scheduleLocalReminders === "function") scheduleLocalReminders();
+}
+
+function icsEscape(value) {
+  return String(value).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
+}
+
+function icsStamp(date, hm) {
+  const [hours, minutes] = hm.split(":").map(Number);
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}T${pad(hours)}${pad(minutes)}00`;
+}
+
+function nextDateOnDay(dayIndex) {
+  const now = vietnamNow();
+  const add = (dayIndex - toDayIndex(now) + 7) % 7;
+  const date = new Date(now);
+  date.setDate(date.getDate() + add);
+  return date;
+}
+
+function icsEvent({ uid, dayIndex, start, end, title, description, lead }) {
+  const date = nextDateOnDay(dayIndex);
+  const alarm = Number(lead) > 0
+    ? `BEGIN:VALARM\nACTION:DISPLAY\nTRIGGER:-PT${Number(lead)}M\nDESCRIPTION:${icsEscape(title)}\nEND:VALARM\n`
+    : "";
+  return `BEGIN:VEVENT
+UID:${uid}
+DTSTAMP:${icsStamp(vietnamNow(), `${pad(vietnamNow().getHours())}:${pad(vietnamNow().getMinutes())}`)}
+DTSTART;TZID=Asia/Ho_Chi_Minh:${icsStamp(date, start)}
+DTEND;TZID=Asia/Ho_Chi_Minh:${icsStamp(date, end)}
+RRULE:FREQ=WEEKLY;BYDAY=${ICS_DAYS[dayIndex]}
+SUMMARY:${icsEscape(title)}
+DESCRIPTION:${icsEscape(description || "")}
+${alarm}END:VEVENT`;
+}
+
+function buildCalendarIcs() {
+  const cls = getClassName();
+  const lead = typeof notifySettings === "undefined" ? 20 : notifySettings.leadMinutes;
+  const events = [];
+  extras.forEach((item) => {
+    item.days.forEach((on, dayIndex) => {
+      if (!on) return;
+      events.push(
+        icsEvent({
+          uid: `${item.id}-${dayIndex}@tkb-1a9`,
+          dayIndex,
+          start: item.start,
+          end: item.end,
+          title: `Học thêm · ${item.name}`,
+          description: [item.place, `Lớp ${cls}`].filter(Boolean).join(" · "),
+          lead: item.remind ? lead : 0,
+        })
+      );
+    });
+  });
+  return `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//TKB 1A9//VI
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:TKB ${cls} học thêm
+${events.join("\n")}
+END:VCALENDAR`.replace(/\n/g, "\r\n");
+}
+
+function downloadCalendarIcs() {
+  if (!extras.length) {
+    alert("Chưa có tiết học thêm để đưa vào Lịch.");
+    return;
+  }
+  const blob = new Blob([buildCalendarIcs()], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "tkb-hoc-them.ics";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2500);
 }
 
 function openSettings() {
