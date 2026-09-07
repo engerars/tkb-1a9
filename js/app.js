@@ -822,7 +822,14 @@ function bind() {
 }
 
 function timeRow(label, startId, endId, start, end) {
-  return `<div class="time-grid"><span>${label}</span><input type="time" id="${startId}" value="${start}" /><input type="time" id="${endId}" value="${end}" /></div>`;
+  return `<div class="time-row">
+    <span class="time-label">${label}</span>
+    <div class="time-fields">
+      <input type="time" id="${startId}" value="${start}" />
+      <span class="time-sep">–</span>
+      <input type="time" id="${endId}" value="${end}" />
+    </div>
+  </div>`;
 }
 
 function renderSettingsForm() {
@@ -846,18 +853,18 @@ function renderSettingsForm() {
     </div>
     <div class="time-block">
       <p class="custom-label">Giờ ra vào lớp</p>
-      <div class="time-grid time-head"><span></span><span>Vào</span><span>Về</span></div>
+      <p class="time-hint">Vào lớp – về</p>
       ${timeRow("Sáng", "arriveM", "dismissM", settings.arrive.morning, settings.dismiss.morning)}
       ${timeRow("Chiều", "arriveA", "dismissA", settings.arrive.afternoon, settings.dismiss.afternoon)}
     </div>
     <div class="time-block">
       <p class="custom-label">Các tiết buổi sáng</p>
-      <div class="time-grid time-head"><span></span><span>Bắt đầu</span><span>Kết thúc</span></div>
+      <p class="time-hint">Bắt đầu – kết thúc</p>
       ${morning}
     </div>
     <div class="time-block">
       <p class="custom-label">Các tiết buổi chiều</p>
-      <div class="time-grid time-head"><span></span><span>Bắt đầu</span><span>Kết thúc</span></div>
+      <p class="time-hint">Bắt đầu – kết thúc</p>
       ${afternoon}
     </div>
   `;

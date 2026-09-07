@@ -904,6 +904,8 @@ body {
 
 .sheet {
   width: min(560px, 100%);
+  max-width: 100%;
+  min-width: 0;
   margin: 0 auto;
   background: #fff;
   border-radius: 24px 24px 20px 20px;
@@ -911,6 +913,7 @@ body {
   box-shadow: 0 20px 50px rgba(74, 48, 64, 0.2);
   max-height: min(88vh, 720px);
   overflow: auto;
+  overflow-x: hidden;
 }
 
 .sheet h2 {
@@ -1035,34 +1038,78 @@ body {
   margin-top: 12px;
 }
 
-.time-grid {
-  display: grid;
-  grid-template-columns: 72px 1fr 1fr;
-  gap: 6px;
-  align-items: center;
-  margin-top: 6px;
+.time-hint {
+  margin: -8px 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.time-grid span {
+.time-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  margin-top: 8px;
+}
+
+.time-label {
   font-size: 13px;
   font-weight: 700;
+  min-width: 0;
 }
 
-.time-head span {
+.time-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 12px minmax(0, 1fr);
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+}
+
+.time-sep {
+  text-align: center;
   color: var(--muted);
-  font-size: 11px;
+  font-weight: 800;
 }
 
-.time-grid input,
+.settings-sheet,
+.settings-sheet * {
+  box-sizing: border-box;
+}
+
 .settings-sheet input[type="text"],
 .settings-sheet input[type="time"] {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 42px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 0 10px;
+  padding: 0 8px;
   font: inherit;
+  font-size: 16px;
   background: #fff;
+}
+
+.settings-sheet input[type="time"] {
+  padding-inline: 6px;
+}
+
+.settings-sheet input[type="time"]::-webkit-calendar-picker-indicator {
+  width: 14px;
+  height: 14px;
+  margin: 0 0 0 2px;
+  padding: 0;
+  opacity: 0.65;
+}
+
+@media (max-width: 380px) {
+  .time-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
 }
 
 .notify-sheet select {
