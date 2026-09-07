@@ -43,7 +43,8 @@ if (hasSession("morning")) {
 if (hasSession("afternoon")) {
   due.push(
     { at: 13 * 60 + 50 - lead, title: "Đưa bé học chiều", body: `Còn ${lead} phút nữa vào lớp (13:50).`, tag: "a-drop", tab: "gio" },
-    { at: 14 * 60, title: "Bắt đầu giờ học chiều", body: "Lớp 1A9 bắt đầu học lúc 14:00.", tag: "a-start", tab: "tkb" },
+    { at: 14 * 60 - lead, title: "Sắp vào học chiều", body: `Còn ${lead} phút nữa vào học chiều (14:00).`, tag: "a-start-lead", tab: "gio" },
+    { at: 14 * 60, title: "Bắt đầu giờ học chiều", body: "Lớp 1A9 vào học chiều lúc 14:00.", tag: "a-start", tab: "tkb" },
     { at: 16 * 60 + 10 - lead, title: "Đón bé tan học chiều", body: `Còn ${lead} phút nữa tan học (16:10).`, tag: "a-pick", tab: "gio" }
   );
 }

@@ -6,15 +6,36 @@ const defaultNotify = {
   leadMinutes: 20,
   dropoff: true,
   start: true,
+  startPm: true,
   pickup: true,
 };
+
+function notifyClassName() {
+  return typeof getClassName === "function" ? getClassName() : "1A9";
+}
+
+function notifyTime(session, kind) {
+  if (typeof settings === "undefined") {
+    const fallback = {
+      morning: { arrive: "06:50", start: "07:00", dismiss: "09:50" },
+      afternoon: { arrive: "13:50", start: "14:00", dismiss: "16:10" },
+    };
+    return fallback[session][kind];
+  }
+  if (kind === "arrive") return settings.arrive[session];
+  if (kind === "dismiss") return settings.dismiss[session];
+  return settings.periods[session][0].start;
+}
 
 let notifySettings = loadNotify();
 let notifyTimers = [];
 
 function loadNotify() {
   try {
-    return { ...defaultNotify, ...JSON.parse(localStorage.getItem(NOTIFY_KEY) || "{}") };
+    const saved = JSON.parse(localStorage.getItem(NOTIFY_KEY) || "{}");
+    const next = { ...defaultNotify, ...saved };
+    if (saved.startPm === undefined && saved.start === false) next.startPm = false;
+    return next;
   } catch {
     return { ...defaultNotify };
   }
@@ -51,31 +72,39 @@ function urlBase64ToUint8Array(base64String) {
 
 function reminderList(dayIndex, lead) {
   const items = [];
+  const cls = notifyClassName();
+  const arriveM = notifyTime("morning", "arrive");
+  const startM = notifyTime("morning", "start");
+  const endM = notifyTime("morning", "dismiss");
+  const arriveA = notifyTime("afternoon", "arrive");
+  const startA = notifyTime("afternoon", "start");
+  const endA = notifyTime("afternoon", "dismiss");
+
   if (sessionHasDay("morning", dayIndex)) {
     if (notifySettings.dropoff) {
       items.push({
         id: "m-drop",
-        at: parseHm("06:50") - lead,
+        at: parseHm(arriveM) - lead,
         title: "Đưa bé đến trường",
-        body: `Còn ${lead} phút nữa vào lớp (6:50). Chuẩn bị đưa học sinh lớp 1A9 đến trường.`,
+        body: `Còn ${lead} phút nữa vào lớp (${arriveM}). Chuẩn bị đưa học sinh lớp ${cls} đến trường.`,
         tab: "gio",
       });
     }
     if (notifySettings.start) {
       items.push({
         id: "m-start",
-        at: parseHm("07:00"),
+        at: parseHm(startM),
         title: "Bắt đầu giờ học sáng",
-        body: "Lớp 1A9 vào tiết lúc 7:00. Phụ huynh lưu ý giờ ra vào lớp.",
+        body: `Lớp ${cls} vào tiết lúc ${startM}. Phụ huynh lưu ý giờ ra vào lớp.`,
         tab: "tkb",
       });
     }
     if (notifySettings.pickup) {
       items.push({
         id: "m-pick",
-        at: parseHm("09:50") - lead,
+        at: parseHm(endM) - lead,
         title: "Đón bé tan học sáng",
-        body: `Còn ${lead} phút nữa tan học (9:50). Xuất phát đón học sinh lớp 1A9.`,
+        body: `Còn ${lead} phút nữa tan học (${endM}). Xuất phát đón học sinh lớp ${cls}.`,
         tab: "gio",
       });
     }
@@ -84,27 +113,34 @@ function reminderList(dayIndex, lead) {
     if (notifySettings.dropoff) {
       items.push({
         id: "a-drop",
-        at: parseHm("13:50") - lead,
+        at: parseHm(arriveA) - lead,
         title: "Đưa bé học chiều",
-        body: `Còn ${lead} phút nữa vào lớp (13:50). Chuẩn bị đưa học sinh lớp 1A9 đến trường.`,
+        body: `Còn ${lead} phút nữa vào lớp (${arriveA}). Chuẩn bị đưa học sinh lớp ${cls} đến trường.`,
         tab: "gio",
       });
     }
-    if (notifySettings.start) {
+    if (notifySettings.startPm) {
+      items.push({
+        id: "a-start-lead",
+        at: parseHm(startA) - lead,
+        title: "Sắp vào học chiều",
+        body: `Còn ${lead} phút nữa vào học chiều (${startA}). Lớp ${cls} chuẩn bị vào tiết.`,
+        tab: "gio",
+      });
       items.push({
         id: "a-start",
-        at: parseHm("14:00"),
+        at: parseHm(startA),
         title: "Bắt đầu giờ học chiều",
-        body: "Lớp 1A9 bắt đầu học lúc 14:00.",
+        body: `Lớp ${cls} vào học chiều lúc ${startA}.`,
         tab: "tkb",
       });
     }
     if (notifySettings.pickup) {
       items.push({
         id: "a-pick",
-        at: parseHm("16:10") - lead,
+        at: parseHm(endA) - lead,
         title: "Đón bé tan học chiều",
-        body: `Còn ${lead} phút nữa tan học (16:10). Xuất phát đón học sinh lớp 1A9.`,
+        body: `Còn ${lead} phút nữa tan học (${endA}). Xuất phát đón học sinh lớp ${cls}.`,
         tab: "gio",
       });
     }
@@ -231,6 +267,7 @@ function renderNotifyPanel() {
   lead.value = String(notifySettings.leadMinutes);
   document.getElementById("notifyDropoff").checked = notifySettings.dropoff;
   document.getElementById("notifyStart").checked = notifySettings.start;
+  document.getElementById("notifyStartPm").checked = notifySettings.startPm;
   document.getElementById("notifyPickup").checked = notifySettings.pickup;
 
   const iosHint = document.getElementById("notifyIos");
@@ -255,7 +292,7 @@ function renderNotifyPanel() {
   const now = vietnamNow();
   const upcoming = reminderList(toDayIndex(now), notifySettings.leadMinutes)
     .filter((item) => item.at > minutesNow(now))
-    .slice(0, 4);
+    .slice(0, 8);
   next.innerHTML = upcoming.length
     ? upcoming.map((item) => `<li><b>${formatClock(item.at)}</b> · ${escapeHtml(item.title)}</li>`).join("")
     : "<li>Hôm nay không còn nhắc nào, hoặc hôm nay không có tiết.</li>";
@@ -285,9 +322,13 @@ function bindNotify() {
     saveNotify();
     scheduleLocalReminders();
   });
-  ["notifyDropoff", "notifyStart", "notifyPickup"].forEach((id) => {
+  [
+    { id: "notifyDropoff", key: "dropoff" },
+    { id: "notifyStart", key: "start" },
+    { id: "notifyStartPm", key: "startPm" },
+    { id: "notifyPickup", key: "pickup" },
+  ].forEach(({ id, key }) => {
     document.getElementById(id).addEventListener("change", (event) => {
-      const key = id.replace("notify", "").toLowerCase();
       notifySettings[key] = event.target.checked;
       saveNotify();
       scheduleLocalReminders();

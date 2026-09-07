@@ -38,9 +38,15 @@
       <div class="hero">
         <div class="hero-text">
           <h1>Thời khóa biểu</h1>
-          <span class="ribbon">Lớp 1A9</span>
+          <span class="ribbon" id="classRibbon">Lớp 1A9</span>
         </div>
-        <button type="button" class="notify-btn" id="notifyOpen" aria-label="Nhắc giờ học">
+        <button type="button" class="icon-btn settings-btn" id="settingsOpen" aria-label="Cài đặt">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.8" />
+            <path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6.1 6.1l1.6 1.6M16.3 16.3l1.6 1.6M17.9 6.1l-1.6 1.6M7.7 16.3l-1.6 1.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+        </button>
+        <button type="button" class="icon-btn notify-btn" id="notifyOpen" aria-label="Nhắc giờ học">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 3a6 6 0 0 0-6 6v3.2L4.4 15a1 1 0 0 0 .8 1.6h13.6a1 1 0 0 0 .8-1.6L18 12.2V9a6 6 0 0 0-6-6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
             <path d="M9.5 16.6a2.5 2.5 0 0 0 5 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
@@ -124,7 +130,8 @@
           <option value="30">30 phút</option>
         </select>
         <label class="check-row"><input id="notifyDropoff" type="checkbox" checked /> Đưa đến trường</label>
-        <label class="check-row"><input id="notifyStart" type="checkbox" checked /> Bắt đầu giờ học</label>
+        <label class="check-row"><input id="notifyStart" type="checkbox" checked /> Vào học sáng</label>
+        <label class="check-row"><input id="notifyStartPm" type="checkbox" checked /> Vào học chiều</label>
         <label class="check-row"><input id="notifyPickup" type="checkbox" checked /> Đón tan học</label>
         <p class="custom-label">Nhắc sắp tới hôm nay</p>
         <ul class="notify-next" id="notifyNext"></ul>
@@ -136,6 +143,19 @@
       </div>
     </div>
 
+    <div class="overlay" id="settingsSheet" hidden>
+      <div class="sheet settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <h2 id="settingsTitle">Cài đặt</h2>
+        <p class="editor-sub">Đổi tên lớp, giờ các tiết và giao diện màu.</p>
+        <div id="settingsForm"></div>
+        <div class="editor-actions">
+          <button type="button" id="saveSettings">Lưu</button>
+          <button type="button" class="ghost" id="closeSettings">Đóng</button>
+        </div>
+        <button type="button" class="reset-btn" id="resetTimes">Khôi phục giờ mặc định</button>
+      </div>
+    </div>
+
     <div class="overlay" id="editor" hidden>
       <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="editorTitle">
         <h2 id="editorTitle">Đổi tiết học</h2>
@@ -144,7 +164,9 @@
         <label class="custom-label" for="customSubject">Môn khác</label>
         <div class="custom-row">
           <input id="customSubject" type="text" maxlength="40" placeholder="Nhập tên môn học" />
-          <button type="button" id="saveCustom">Lưu</button>
+        </div>
+        <div class="editor-actions confirm-row">
+          <button type="button" id="confirmSubject">Xác nhận</button>
         </div>
         <div class="editor-actions">
           <button type="button" class="ghost" id="clearPeriod">Để trống</button>
