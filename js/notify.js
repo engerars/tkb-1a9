@@ -32,6 +32,14 @@ function isStandaloneApp() {
   return window.navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
 }
 
+function hasNotificationAPI() {
+  return typeof window.Notification === "function";
+}
+
+function notificationGranted() {
+  return hasNotificationAPI() && Notification.permission === "granted";
+}
+
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -109,7 +117,7 @@ function formatClock(minutes) {
 }
 
 async function showReminder(item) {
-  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  if (!notificationGranted()) return;
   const payload = { type: "notify", title: item.title, body: item.body, tag: item.id, tab: item.tab };
   const ready = navigator.serviceWorker?.ready;
   if (ready) {
@@ -139,7 +147,7 @@ function clearNotifyTimers() {
 
 function scheduleLocalReminders() {
   clearNotifyTimers();
-  if (!notifySettings.enabled || !("Notification" in window) || Notification.permission !== "granted") {
+  if (!notifySettings.enabled || !notificationGranted()) {
     renderNotifyPanel();
     return;
   }
@@ -169,15 +177,20 @@ async function registerPush() {
 }
 
 async function enableNotifications() {
-  if (!("Notification" in window)) {
-    alert("Trình duyệt này không hỗ trợ thông báo.");
-    return;
-  }
-  if (isIosDevice() && !isStandaloneApp()) {
+  if (!window.isSecureContext || !hasNotificationAPI()) {
+    notifySettings.enabled = false;
+    saveNotify();
     renderNotifyPanel();
     return;
   }
-  const permission = await Notification.requestPermission();
+  let permission = Notification.permission;
+  if (permission !== "granted") {
+    try {
+      permission = await Notification.requestPermission();
+    } catch {
+      permission = "denied";
+    }
+  }
   if (permission !== "granted") {
     notifySettings.enabled = false;
     saveNotify();
@@ -214,27 +227,28 @@ function renderNotifyPanel() {
   const lead = document.getElementById("notifyLead");
   if (!status || !next || !toggle || !lead) return;
 
-  toggle.checked = notifySettings.enabled && Notification.permission === "granted";
+  toggle.checked = notifySettings.enabled && notificationGranted();
   lead.value = String(notifySettings.leadMinutes);
   document.getElementById("notifyDropoff").checked = notifySettings.dropoff;
   document.getElementById("notifyStart").checked = notifySettings.start;
   document.getElementById("notifyPickup").checked = notifySettings.pickup;
 
   const iosHint = document.getElementById("notifyIos");
-  if (isIosDevice() && !isStandaloneApp()) {
+  const onIosBrowser = isIosDevice() && !isStandaloneApp();
+  if (!window.isSecureContext) {
+    iosHint.hidden = !isIosDevice();
+    status.textContent = "Cần mở bằng https, hoặc thêm ra Màn hình chính rồi mở icon TKB 1A9.";
+  } else if (onIosBrowser && !hasNotificationAPI()) {
     iosHint.hidden = false;
-    status.textContent = "Trên iPhone: bấm Share → Thêm vào Màn hình chính, rồi mở icon TKB 1A9 để bật thông báo.";
-  } else if (!("Notification" in window)) {
-    iosHint.hidden = true;
-    status.textContent = "Thiết bị này chưa hỗ trợ thông báo web.";
-  } else if (Notification.permission === "denied") {
-    iosHint.hidden = true;
-    status.textContent = "Thông báo đang bị chặn. Vào Cài đặt của máy để cho phép thông báo với TKB 1A9.";
+    status.textContent = "Safari/Edge trên iPhone chỉ gửi thông báo khi mở từ icon ở Màn hình chính.";
+  } else if (hasNotificationAPI() && Notification.permission === "denied") {
+    iosHint.hidden = !onIosBrowser;
+    status.textContent = "Thông báo đang bị chặn. Vào Cài đặt máy, cho phép thông báo với TKB 1A9.";
   } else if (toggle.checked) {
     iosHint.hidden = true;
     status.textContent = "Đã bật. App sẽ nhắc trước giờ đưa/đón và khi bắt đầu học.";
   } else {
-    iosHint.hidden = isIosDevice() ? false : true;
+    iosHint.hidden = !onIosBrowser;
     status.textContent = "Bật thông báo để nhắc phụ huynh đưa và đón đúng giờ.";
   }
 
@@ -293,7 +307,7 @@ function bindNotify() {
     }
   });
   document.getElementById("notifyTest").addEventListener("click", async () => {
-    if (Notification.permission !== "granted") {
+    if (!notificationGranted()) {
       await enableNotifications();
       return;
     }
@@ -321,7 +335,7 @@ async function initNotify() {
     }
   }
   bindNotify();
-  if (notifySettings.enabled && Notification.permission === "granted") {
+  if (notifySettings.enabled && notificationGranted()) {
     try {
       await registerPush();
     } catch {

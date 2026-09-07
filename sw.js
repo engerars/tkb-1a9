@@ -1,4 +1,4 @@
-const CACHE = "tkb-1a9-v3";
+const CACHE = "tkb-1a9-v4";
 const ASSETS = [
   "./",
   "./index.html",
