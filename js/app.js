@@ -552,6 +552,7 @@ function applySubject(name) {
   renderDayBar();
   renderDayBoard();
   renderWeekBoard();
+  if (typeof scheduleLocalReminders === "function") scheduleLocalReminders();
 }
 
 function resetSchedule() {
@@ -564,6 +565,7 @@ function resetSchedule() {
   renderDayBar();
   renderDayBoard();
   renderWeekBoard();
+  if (typeof scheduleLocalReminders === "function") scheduleLocalReminders();
 }
 
 function bind() {

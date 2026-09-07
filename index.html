@@ -12,9 +12,12 @@
     />
     <meta name="theme-color" content="#e56b93" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="TKB 1A9" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>Thời khóa biểu lớp 1A9 – Tuyết Vũ</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icons/icon-180.png" />
     <link rel="manifest" href="manifest.json" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -37,7 +40,15 @@
           <h1>Thời khóa biểu</h1>
           <span class="ribbon">Lớp 1A9</span>
         </div>
-        <p class="gv-inline">GVCN Phạm Thị Thu Phúc</p>
+        <div class="hero-right">
+          <p class="gv-inline">GVCN Phạm Thị Thu Phúc</p>
+          <button type="button" class="notify-btn" id="notifyOpen" aria-label="Nhắc giờ học">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3a6 6 0 0 0-6 6v3.2L4.4 15a1 1 0 0 0 .8 1.6h13.6a1 1 0 0 0 .8-1.6L18 12.2V9a6 6 0 0 0-6-6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+              <path d="M9.5 16.6a2.5 2.5 0 0 0 5 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -96,6 +107,38 @@
       <p>Đúng giờ · Nề nếp tốt · Học tập hiệu quả</p>
     </footer>
 
+    <div class="overlay" id="notifySheet" hidden>
+      <div class="sheet notify-sheet" role="dialog" aria-modal="true" aria-labelledby="notifyTitle">
+        <h2 id="notifyTitle">Nhắc đưa – đón đúng giờ</h2>
+        <p class="editor-sub" id="notifyStatus"></p>
+        <p class="ios-hint" id="notifyIos" hidden>
+          iPhone: bấm <b>Chia sẻ</b> → <b>Thêm vào Màn hình chính</b>, rồi mở icon
+          <b>TKB 1A9</b> (không mở bằng Safari) và cho phép thông báo.
+        </p>
+        <label class="switch-row">
+          <span>Bật thông báo</span>
+          <input id="notifyToggle" type="checkbox" />
+        </label>
+        <label class="custom-label" for="notifyLead">Nhắc trước</label>
+        <select id="notifyLead">
+          <option value="10">10 phút</option>
+          <option value="15">15 phút</option>
+          <option value="20" selected>20 phút</option>
+          <option value="30">30 phút</option>
+        </select>
+        <label class="check-row"><input id="notifyDropoff" type="checkbox" checked /> Đưa đến trường</label>
+        <label class="check-row"><input id="notifyStart" type="checkbox" checked /> Bắt đầu giờ học</label>
+        <label class="check-row"><input id="notifyPickup" type="checkbox" checked /> Đón tan học</label>
+        <p class="custom-label">Nhắc sắp tới hôm nay</p>
+        <ul class="notify-next" id="notifyNext"></ul>
+        <div class="editor-actions">
+          <button type="button" id="notifyTest">Gửi thử</button>
+          <button type="button" class="ghost" id="closeNotify">Đóng</button>
+        </div>
+        <button type="button" class="reset-btn" id="notifyCopy">Sao chép mã thiết bị (nhắc khi tắt app)</button>
+      </div>
+    </div>
+
     <div class="overlay" id="editor" hidden>
       <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="editorTitle">
         <h2 id="editorTitle">Đổi tiết học</h2>
@@ -114,5 +157,6 @@
     </div>
 
     <script src="js/app.js"></script>
+    <script src="js/notify.js"></script>
   </body>
 </html>

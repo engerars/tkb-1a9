@@ -1,0 +1,4 @@
+{
+  "morning": [true, true, true, true, false, false, false],
+  "afternoon": [false, true, true, true, true, false, false]
+}

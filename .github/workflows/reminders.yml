@@ -1,0 +1,23 @@
+name: School time reminders
+
+on:
+  schedule:
+    - cron: "*/5 23 * * 0-4"
+    - cron: "*/5 0,2,6,7,8 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install web-push
+      - name: Send due reminders
+        env:
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          LEAD_MINUTES: "20"
+        run: node tools/send-reminders.mjs

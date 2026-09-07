@@ -1,0 +1,28 @@
+name: Register push device
+
+on:
+  workflow_dispatch:
+    inputs:
+      subscription:
+        description: "Push subscription JSON"
+        required: true
+        type: string
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add subscription
+        env:
+          SUB: ${{ inputs.subscription }}
+        run: node tools/add-subscription.mjs
+      - name: Commit
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add data/subscriptions.json
+          git diff --cached --quiet || git commit -m "Register a reminder device"
+          git push
