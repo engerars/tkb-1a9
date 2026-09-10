@@ -1,11 +1,13 @@
 import webpush from "web-push";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const publicKey = process.env.VAPID_PUBLIC_KEY;
 const privateKey = process.env.VAPID_PRIVATE_KEY;
+const WINDOW_MINUTES = Number(process.env.WINDOW_MINUTES || 90);
+const sentPath = join(root, ".reminders-sent.json");
 
 if (!publicKey || !privateKey) {
   console.log("Missing VAPID keys; skip send.");
@@ -27,10 +29,24 @@ const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi
 const day = now.getDay() === 0 ? 6 : now.getDay() - 1;
 const minutes = now.getHours() * 60 + now.getMinutes();
 const lead = Number(process.env.LEAD_MINUTES || 20);
+const dayStamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
 function hasSession(session) {
   return timetable[session][day];
 }
+
+let sent = {};
+try {
+  sent = JSON.parse(await readFile(sentPath, "utf8"));
+} catch {
+  sent = {};
+}
+
+const keepPrefix = dayStamp;
+const yesterday = new Date(now);
+yesterday.setDate(yesterday.getDate() - 1);
+const yesterdayStamp = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`;
+sent = Object.fromEntries(Object.entries(sent).filter(([key]) => key.startsWith(keepPrefix) || key.startsWith(yesterdayStamp)));
 
 const due = [];
 if (hasSession("morning")) {
@@ -49,20 +65,38 @@ if (hasSession("afternoon")) {
   );
 }
 
-const matched = due.filter((item) => minutes >= item.at && minutes < item.at + 5);
+const matched = due.filter((item) => {
+  const key = `${dayStamp}:${item.tag}`;
+  if (sent[key]) return false;
+  return minutes >= item.at && minutes < item.at + WINDOW_MINUTES;
+});
+
 if (!matched.length) {
-  console.log(`No reminder in this window (${minutes} min).`);
+  console.log(`No reminder in this window (${minutes} min, window ${WINDOW_MINUTES}).`);
+  await writeFile(sentPath, `${JSON.stringify(sent, null, 2)}\n`);
   process.exit(0);
 }
 
+let deliveredAny = false;
 for (const item of matched) {
+  const key = `${dayStamp}:${item.tag}`;
   const payload = JSON.stringify({ title: item.title, body: item.body, tag: item.tag, tab: item.tab });
+  let delivered = 0;
   for (const sub of subscriptions) {
     try {
       await webpush.sendNotification(sub, payload);
+      delivered += 1;
       console.log("sent", item.tag);
     } catch (error) {
       console.log("skip", item.tag, error.statusCode || error.message);
     }
   }
+  if (delivered > 0) {
+    sent[key] = Date.now();
+    deliveredAny = true;
+  }
 }
+
+await writeFile(sentPath, `${JSON.stringify(sent, null, 2)}\n`);
+if (deliveredAny) console.log("updated sent log");
+

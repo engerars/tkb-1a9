@@ -1344,6 +1344,7 @@ setInterval(() => {
   const slot = currentSlot(vietnamNow());
   const key = `${slot.kind}|${slot.session || ""}|${slot.period || ""}`;
   renderNowBar();
+  if (typeof tickReminders === "function") tickReminders();
   if (key === lastSlotKey) return;
   lastSlotKey = key;
   renderDayBoard(false);

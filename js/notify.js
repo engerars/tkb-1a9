@@ -1,5 +1,7 @@
 const NOTIFY_KEY = "tkb-1a9-notify-v1";
+const SENT_KEY = "tkb-1a9-notify-sent-v1";
 const VAPID_PUBLIC_KEY = "BGTD4OuJoIAiAnwRoe9fHjLBYLgWLfnBtqIpMD1Z4rGu-_DlhhclTdvfWPNgFQqxcCU60gJfjjDpC2opNj1Qucg";
+const GRACE_MINUTES = 15;
 
 const defaultNotify = {
   enabled: false,
@@ -30,6 +32,8 @@ function notifyTime(session, kind) {
 
 let notifySettings = loadNotify();
 let notifyTimers = [];
+const notifyFiring = new Set();
+let sentMemory = loadSent();
 
 function loadNotify() {
   try {
@@ -44,6 +48,59 @@ function loadNotify() {
 
 function saveNotify() {
   localStorage.setItem(NOTIFY_KEY, JSON.stringify(notifySettings));
+}
+
+function loadSent() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SENT_KEY) || "{}");
+    return saved && typeof saved === "object" ? saved : {};
+  } catch {
+    return {};
+  }
+}
+
+function dayStamp(date) {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function pruneSent(now) {
+  const keep = new Set([dayStamp(now)]);
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  keep.add(dayStamp(yesterday));
+  const next = {};
+  Object.entries(sentMemory).forEach(([key, value]) => {
+    if (keep.has(String(key).split(":")[0])) next[key] = value;
+  });
+  sentMemory = next;
+}
+
+function persistSent() {
+  try {
+    localStorage.setItem(SENT_KEY, JSON.stringify(sentMemory));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+function reminderKey(date, id) {
+  return `${dayStamp(date)}:${id}`;
+}
+
+function waitFor(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("timeout")), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
 }
 
 function isIosDevice() {
@@ -173,32 +230,69 @@ function formatClock(minutes) {
 }
 
 async function showReminder(item) {
-  if (!notificationGranted()) return;
-  const payload = { type: "notify", title: item.title, body: item.body, tag: item.id, tab: item.tab };
-  const ready = navigator.serviceWorker?.ready;
-  if (ready) {
-    const reg = await ready;
-    if (reg.active) {
-      reg.active.postMessage(payload);
-      return;
+  if (!notificationGranted()) return false;
+  const options = {
+    body: item.body,
+    tag: item.id,
+    renotify: true,
+    icon: "./favicon.svg",
+    badge: "./favicon.svg",
+    data: { url: "./index.html", tab: item.tab },
+  };
+  try {
+    if (navigator.serviceWorker) {
+      const reg = await waitFor(navigator.serviceWorker.ready, 2000);
+      if (reg?.showNotification) {
+        await reg.showNotification(item.title, options);
+        return true;
+      }
+      if (reg?.active) {
+        reg.active.postMessage({ type: "notify", title: item.title, ...options, tab: item.tab });
+        return true;
+      }
     }
-    if (reg.showNotification) {
-      await reg.showNotification(item.title, {
-        body: item.body,
-        tag: item.id,
-        renotify: true,
-        icon: "./favicon.svg",
-        data: { url: "./index.html", tab: item.tab },
-      });
-      return;
-    }
+  } catch {
+    /* fall through to page Notification */
   }
-  new Notification(item.title, { body: item.body, tag: item.id });
+  try {
+    new Notification(item.title, { body: item.body, tag: item.id });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function clearNotifyTimers() {
-  notifyTimers.forEach((id) => clearTimeout(id));
+  notifyTimers.forEach((id) => {
+    clearTimeout(id);
+    clearInterval(id);
+  });
   notifyTimers = [];
+}
+
+async function tickReminders() {
+  if (!notifySettings.enabled || !notificationGranted()) return;
+  const now = vietnamNow();
+  pruneSent(now);
+  const nowMin = minutesNow(now) + now.getSeconds() / 60;
+  const items = reminderList(toDayIndex(now), notifySettings.leadMinutes);
+  for (const item of items) {
+    const late = nowMin - item.at;
+    if (late < 0 || late > GRACE_MINUTES) continue;
+    const key = reminderKey(now, item.id);
+    if (sentMemory[key] || notifyFiring.has(key)) continue;
+    notifyFiring.add(key);
+    try {
+      const shown = await showReminder(item);
+      if (!shown) continue;
+      sentMemory[key] = Date.now();
+      persistSent();
+    } catch {
+      /* retry on the next tick */
+    } finally {
+      notifyFiring.delete(key);
+    }
+  }
 }
 
 function scheduleLocalReminders() {
@@ -207,20 +301,26 @@ function scheduleLocalReminders() {
     renderNotifyPanel();
     return;
   }
+  tickReminders();
+  notifyTimers.push(setInterval(tickReminders, 15000));
   const now = vietnamNow();
   const nowMin = minutesNow(now);
   const sec = now.getSeconds();
   reminderList(toDayIndex(now), notifySettings.leadMinutes).forEach((item) => {
     const delay = (item.at - nowMin) * 60 * 1000 - sec * 1000;
-    if (delay < 1500 || delay > 20 * 3600 * 1000) return;
-    notifyTimers.push(setTimeout(() => showReminder(item), delay));
+    if (delay < 1500 || delay > 36 * 3600 * 1000) return;
+    notifyTimers.push(setTimeout(() => tickReminders(), delay));
   });
+  const msToMidnight = ((24 * 60 - nowMin) * 60 - sec) * 1000 + 2000;
+  if (msToMidnight > 1500 && msToMidnight < 36 * 3600 * 1000) {
+    notifyTimers.push(setTimeout(() => scheduleLocalReminders(), msToMidnight));
+  }
   renderNotifyPanel();
 }
 
 async function registerPush() {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
-  const reg = await navigator.serviceWorker.ready;
+  const reg = await waitFor(navigator.serviceWorker.ready, 4000);
   let sub = await reg.pushManager.getSubscription();
   if (!sub) {
     sub = await reg.pushManager.subscribe({
@@ -304,7 +404,12 @@ function renderNotifyPanel() {
     status.textContent = "Thông báo đang bị chặn. Vào Cài đặt máy, cho phép thông báo với TKB 1A9.";
   } else if (toggle.checked) {
     iosHint.hidden = true;
-    status.textContent = "Đã bật. App sẽ nhắc trước giờ đưa/đón và khi bắt đầu học.";
+    const pending = reminderList(toDayIndex(vietnamNow()), notifySettings.leadMinutes).filter(
+      (item) => item.at > minutesNow(vietnamNow())
+    ).length;
+    status.textContent = pending
+      ? `Đã bật. Còn ${pending} nhắc hôm nay, app sẽ tự gửi đúng giờ.`
+      : "Đã bật. Hôm nay không còn nhắc. Mai app sẽ hẹn lại.";
   } else {
     iosHint.hidden = !onIosBrowser;
     status.textContent = "Bật thông báo để nhắc phụ huynh đưa và đón đúng giờ.";
@@ -373,16 +478,17 @@ function bindNotify() {
     }
   });
   document.getElementById("notifyTest").addEventListener("click", async () => {
-    if (!notificationGranted()) {
+    if (!notificationGranted() || !notifySettings.enabled) {
       await enableNotifications();
-      return;
     }
+    if (!notificationGranted()) return;
     await showReminder({
       id: "test",
       title: "Nhắc thử · Đưa bé đến trường",
       body: "Đây là thông báo thử. Còn 20 phút nữa vào lớp (6:50).",
       tab: "gio",
     });
+    scheduleLocalReminders();
   });
   navigator.serviceWorker?.addEventListener("message", (event) => {
     if (event.data?.type === "open-tab" && event.data.tab) setTab(event.data.tab);
@@ -390,6 +496,8 @@ function bindNotify() {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") scheduleLocalReminders();
   });
+  window.addEventListener("pageshow", () => scheduleLocalReminders());
+  window.addEventListener("focus", () => tickReminders());
 }
 
 async function initNotify() {

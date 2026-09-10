@@ -5,3 +5,4 @@ schedule.png
 time.jpg
 node_modules
 package-lock.json
+.reminders-sent.json
