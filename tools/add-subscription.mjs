@@ -3,7 +3,31 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const file = join(dirname(fileURLToPath(import.meta.url)), "..", "data", "subscriptions.json");
-const incoming = JSON.parse(process.env.SUB || "null");
+
+function parseSub(raw) {
+  if (!raw) return null;
+  const trimmed = String(raw)
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const start = trimmed.indexOf("{");
+    const end = trimmed.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      try {
+        return JSON.parse(trimmed.slice(start, end + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+const incoming = parseSub(process.env.SUB);
 if (!incoming?.endpoint) {
   console.log("No subscription endpoint; skip.");
   process.exit(0);

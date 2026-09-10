@@ -329,7 +329,32 @@ async function registerPush() {
     });
   }
   localStorage.setItem("tkb-1a9-push-sub", JSON.stringify(sub.toJSON()));
+  await uploadSubscription(sub.toJSON());
   return sub;
+}
+
+async function uploadSubscription(sub) {
+  if (!sub?.endpoint) return false;
+  try {
+    const res = await fetch("/api/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sub),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (data?.ok) {
+      localStorage.setItem("tkb-1a9-push-registered", "1");
+      return true;
+    }
+  } catch {
+    /* server route may be missing */
+  }
+  return false;
+}
+
+function deviceRegisterUrl(raw) {
+  return `https://github.com/engerars/tkb-1a9/issues/new?title=${encodeURIComponent("[tkb-push] Đăng ký thiết bị")}&body=${encodeURIComponent(raw)}`;
 }
 
 async function enableNotifications() {
@@ -367,6 +392,10 @@ async function enableNotifications() {
     body: "Phụ huynh sẽ nhận thông báo trước giờ đưa, đón và khi bắt đầu học.",
     tab: "gio",
   });
+  if (isIosDevice() && typeof downloadCalendarIcs === "function") {
+    const addCal = confirm("iPhone không gửi thông báo app khi đã tắt. Bấm OK để thêm giờ đưa/đón vào Lịch (có chuông đúng giờ).");
+    if (addCal) downloadCalendarIcs();
+  }
 }
 
 function disableNotifications() {
@@ -407,9 +436,10 @@ function renderNotifyPanel() {
     const pending = reminderList(toDayIndex(vietnamNow()), notifySettings.leadMinutes).filter(
       (item) => item.at > minutesNow(vietnamNow())
     ).length;
+    const iosNote = isIosDevice() ? " iPhone: thêm vào Lịch để có chuông khi tắt app." : "";
     status.textContent = pending
-      ? `Đã bật. Còn ${pending} nhắc hôm nay, app sẽ tự gửi đúng giờ.`
-      : "Đã bật. Hôm nay không còn nhắc. Mai app sẽ hẹn lại.";
+      ? `Đã bật. Còn ${pending} nhắc hôm nay.${iosNote}`
+      : `Đã bật. Hôm nay không còn nhắc. Mai app sẽ hẹn lại.${iosNote}`;
   } else {
     iosHint.hidden = !onIosBrowser;
     status.textContent = "Bật thông báo để nhắc phụ huynh đưa và đón đúng giờ.";
@@ -465,17 +495,31 @@ function bindNotify() {
     if (typeof downloadCalendarIcs === "function") downloadCalendarIcs();
   });
   document.getElementById("notifyCopy").addEventListener("click", async () => {
-    const raw = localStorage.getItem("tkb-1a9-push-sub");
+    let raw = localStorage.getItem("tkb-1a9-push-sub");
     if (!raw) {
-      alert("Hãy bật thông báo trước, rồi sao chép mã thiết bị.");
+      try {
+        const sub = await registerPush();
+        raw = sub ? JSON.stringify(sub.toJSON()) : null;
+      } catch {
+        raw = null;
+      }
+    }
+    if (!raw) {
+      alert("Hãy bật thông báo trước, rồi đăng ký thiết bị.");
       return;
     }
     try {
       await navigator.clipboard.writeText(raw);
-      alert("Đã sao chép. Gửi mã này để đăng ký nhắc khi đã tắt hẳn app.");
     } catch {
-      alert(raw);
+      /* ignore */
     }
+    const uploaded = await uploadSubscription(JSON.parse(raw));
+    if (uploaded) {
+      alert("Đã đăng ký thiết bị. TKB 1A9 có thể nhắc cả khi tắt app.");
+      return;
+    }
+    const go = confirm("Chưa gửi được lên máy chủ. Bấm OK để mở GitHub, rồi bấm Submit new issue (cần đang đăng nhập GitHub).");
+    if (go) window.open(deviceRegisterUrl(raw), "_blank");
   });
   document.getElementById("notifyTest").addEventListener("click", async () => {
     if (!notificationGranted() || !notifySettings.enabled) {

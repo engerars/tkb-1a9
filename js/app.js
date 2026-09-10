@@ -1,3 +1,4 @@
+const APP_VERSION = "1.11";
 const STORAGE_KEY = "tkb-1a9-schedule-v2";
 const SETTINGS_KEY = "tkb-1a9-settings-v1";
 
@@ -789,6 +790,8 @@ function applyChrome() {
   if (ribbon) ribbon.textContent = classRibbon();
   document.title = `Thời khóa biểu ${classRibbon()} – Tuyết Vũ`;
   applyTheme(settings.theme);
+  const versionEl = document.getElementById("appVersion");
+  if (versionEl) versionEl.textContent = `Phiên bản ${APP_VERSION}`;
 }
 
 function setTab(tab) {
@@ -1256,9 +1259,8 @@ function nextDateOnDay(dayIndex) {
 
 function icsEvent({ uid, dayIndex, start, end, title, description, lead }) {
   const date = nextDateOnDay(dayIndex);
-  const alarm = Number(lead) > 0
-    ? `BEGIN:VALARM\nACTION:DISPLAY\nTRIGGER:-PT${Number(lead)}M\nDESCRIPTION:${icsEscape(title)}\nEND:VALARM\n`
-    : "";
+  const trigger = Number(lead) > 0 ? `-PT${Number(lead)}M` : "PT0S";
+  const alarm = `BEGIN:VALARM\nACTION:DISPLAY\nTRIGGER:${trigger}\nDESCRIPTION:${icsEscape(title)}\nEND:VALARM\n`;
   return `BEGIN:VEVENT
 UID:${uid}
 DTSTAMP:${icsStamp(vietnamNow(), `${pad(vietnamNow().getHours())}:${pad(vietnamNow().getMinutes())}`)}
@@ -1273,8 +1275,40 @@ ${alarm}END:VEVENT`;
 function buildCalendarIcs() {
   const cls = getClassName();
   const lead = typeof notifySettings === "undefined" ? 20 : notifySettings.leadMinutes;
+  const flags = typeof notifySettings === "undefined" ? { dropoff: true, start: true, startPm: true, pickup: true, extra: true } : notifySettings;
   const events = [];
+  const arriveM = settings.arrive.morning;
+  const startM = settings.periods.morning[0].start;
+  const endM = settings.dismiss.morning;
+  const arriveA = settings.arrive.afternoon;
+  const startA = settings.periods.afternoon[0].start;
+  const endA = settings.dismiss.afternoon;
+  DAYS.forEach((_, dayIndex) => {
+    if (sessionHasDay("morning", dayIndex)) {
+      if (flags.dropoff) {
+        events.push(icsEvent({ uid: `m-drop-${dayIndex}@tkb-1a9`, dayIndex, start: arriveM, end: startM, title: "Đưa bé đến trường", description: `Lớp ${cls}`, lead }));
+      }
+      if (flags.start) {
+        events.push(icsEvent({ uid: `m-start-${dayIndex}@tkb-1a9`, dayIndex, start: startM, end: settings.periods.morning[0].end, title: "Bắt đầu giờ học sáng", description: `Lớp ${cls}`, lead: 0 }));
+      }
+      if (flags.pickup) {
+        events.push(icsEvent({ uid: `m-pick-${dayIndex}@tkb-1a9`, dayIndex, start: endM, end: endM, title: "Đón bé tan học sáng", description: `Lớp ${cls}`, lead }));
+      }
+    }
+    if (sessionHasDay("afternoon", dayIndex)) {
+      if (flags.dropoff) {
+        events.push(icsEvent({ uid: `a-drop-${dayIndex}@tkb-1a9`, dayIndex, start: arriveA, end: startA, title: "Đưa bé học chiều", description: `Lớp ${cls}`, lead }));
+      }
+      if (flags.startPm) {
+        events.push(icsEvent({ uid: `a-start-${dayIndex}@tkb-1a9`, dayIndex, start: startA, end: settings.periods.afternoon[0].end, title: "Bắt đầu giờ học chiều", description: `Lớp ${cls}`, lead }));
+      }
+      if (flags.pickup) {
+        events.push(icsEvent({ uid: `a-pick-${dayIndex}@tkb-1a9`, dayIndex, start: endA, end: endA, title: "Đón bé tan học chiều", description: `Lớp ${cls}`, lead }));
+      }
+    }
+  });
   extras.forEach((item) => {
+    if (flags.extra === false) return;
     item.days.forEach((on, dayIndex) => {
       if (!on) return;
       events.push(
@@ -1290,30 +1324,32 @@ function buildCalendarIcs() {
       );
     });
   });
-  return `BEGIN:VCALENDAR
+  return { events, ics: `BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//TKB 1A9//VI
 CALSCALE:GREGORIAN
 METHOD:PUBLISH
-X-WR-CALNAME:TKB ${cls} học thêm
+X-WR-CALNAME:TKB ${cls} đưa đón
 ${events.join("\n")}
-END:VCALENDAR`.replace(/\n/g, "\r\n");
+END:VCALENDAR`.replace(/\n/g, "\r\n") };
 }
 
 function downloadCalendarIcs() {
-  if (!extras.length) {
-    alert("Chưa có tiết học thêm để đưa vào Lịch.");
-    return;
+  const built = buildCalendarIcs();
+  if (!built.events.length) {
+    alert("Chưa có giờ đưa/đón hoặc học thêm để đưa vào Lịch.");
+    return false;
   }
-  const blob = new Blob([buildCalendarIcs()], { type: "text/calendar;charset=utf-8" });
+  const blob = new Blob([built.ics], { type: "text/calendar;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "tkb-hoc-them.ics";
+  link.download = "tkb-1a9-nhac-gio.ics";
   document.body.appendChild(link);
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2500);
+  return true;
 }
 
 function openSettings() {

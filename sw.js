@@ -1,4 +1,4 @@
-const CACHE = "tkb-1a9-v10";
+const CACHE = "tkb-1a9-v11";
 const ASSETS = [
   "./",
   "./index.html",
@@ -89,3 +89,34 @@ self.addEventListener("message", (event) => {
     );
   }
 });
+
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    (async () => {
+      try {
+        const sub = await self.registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(
+            "BGTD4OuJoIAiAnwRoe9fHjLBYLgWLfnBtqIpMD1Z4rGu-_DlhhclTdvfWPNgFQqxcCU60gJfjjDpC2opNj1Qucg"
+          ),
+        });
+        await fetch("/api/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(sub.toJSON()),
+        });
+      } catch {
+        /* ignore */
+      }
+    })()
+  );
+});
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  const output = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) output[i] = raw.charCodeAt(i);
+  return output;
+}

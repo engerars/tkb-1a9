@@ -1,6 +1,8 @@
 name: Register push device
 
 on:
+  issues:
+    types: [opened]
   workflow_dispatch:
     inputs:
       subscription:
@@ -10,14 +12,16 @@ on:
 
 jobs:
   register:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'issues' && startsWith(github.event.issue.title, '[tkb-push]'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      issues: write
     steps:
       - uses: actions/checkout@v4
       - name: Add subscription
         env:
-          SUB: ${{ inputs.subscription }}
+          SUB: ${{ github.event.inputs.subscription || github.event.issue.body }}
         run: node tools/add-subscription.mjs
       - name: Commit
         run: |
@@ -26,3 +30,8 @@ jobs:
           git add data/subscriptions.json
           git diff --cached --quiet || git commit -m "Register a reminder device"
           git push
+      - name: Close issue
+        if: github.event_name == 'issues'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue close ${{ github.event.issue.number }} --comment "Đã đăng ký thiết bị cho nhắc giờ học."
